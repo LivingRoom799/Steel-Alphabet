@@ -1,103 +1,117 @@
 const SteelAlphabet = {
-    images : new Map(),
-    imageWidths : new Map(),
-    tokens : new Set(),
-    symbols : [
-  'a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','r','s','t','v','w','x','y','z']
+    images: new Map(),
+    imageWidths: new Map(),
+    symbols: [
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z', ' ' // added space
+    ],
+    spaceWidth: 20 
 };
+
 
 SteelAlphabet.loadImages = function loadImages() {
     return Promise.all(
         SteelAlphabet.symbols.map(symbol =>
             fetch("Steel Alphabet/" + symbol + ".svg")
-            .then(response => response.text())
-            .then(text => text.replace(/stroke:#[0-9a-fA-F]*;?/g, ''))
-            .then(text => text.replace(/stroke-width:[0-9a-zA-Z]*;?/g, ''))
-            .then(text => {
-                console.log(`SVG content for ${symbol}:`, text);
-                return (new window.DOMParser()).parseFromString(text, "text/xml");
-            })
-            .then(svgNode => {
-                const svgElement = svgNode.documentElement;
-                if (!svgElement) {
-                    console.error(`No root SVG element found in SVG for symbol: ${symbol}`);
-                    return;
-                }
-
-                // Read width and height attributes
-                const width = svgElement.getAttribute("width") || "100"; // Default to 100 if width is missing
-                const height = svgElement.getAttribute("height") || "100"; // Default to 100 if height is missing
-
-                SteelAlphabet.images.set(symbol, svgElement);
-                SteelAlphabet.imageWidths.set(symbol, parseInt(width));
-                console.log(`Loaded SVG for symbol: ${symbol}`);
-            })
-            .catch(error => console.error(`Failed to load SVG for symbol: ${symbol}`, error))
+                .then(response => response.text())
+                .then(text => text.replace(/stroke:#[0-9a-fA-F]*;?/g, ''))
+                .then(text => text.replace(/stroke-width:[0-9a-zA-Z]*;?/g, ''))
+                .then(text => {
+                    return (new window.DOMParser()).parseFromString(text, "text/xml");
+                })
+                .then(svgNode => {
+                    const svgElement = svgNode.documentElement;
+                    if (!svgElement) {
+                        console.error(`No root SVG element found in SVG for symbol: ${symbol}`);
+                        return;
+                    }
+                    SteelAlphabet.images.set(symbol, svgElement);
+                    const width = parseInt(svgElement.getAttribute("width")) || 100;
+                    SteelAlphabet.imageWidths.set(symbol, width);
+                })
         )
-    ).then(() => {
-        console.log("All images loaded.");
-    });
-}
+    );
+};
 
-
-
-
+// Normalize input and apply character replacements
 SteelAlphabet.normalizeInput = function normalizeInput(input) {
-    // Convert input to lowercase
     let normalized = input.toLowerCase();
-    
-    // Replace specific characters according to rules
-    normalized = normalized.replace(/i/g, 'e'); // Replace 'i' with 'e'
-    normalized = normalized.replace(/u/g, 'o'); // Replace 'u' with 'o'
-    normalized = normalized.replace(/ch/g, 'c'); // Replace 'ch' with 'c'
-
+    normalized = normalized.replace(/i/g, 'e');
+    normalized = normalized.replace(/u/g, 'o');
+    normalized = normalized.replace(/ch/g, 'c');
     return normalized;
 };
 
+
+SteelAlphabet.expandCanvasIfNeeded = function expandCanvasIfNeeded(ctx, width, height) {
+    const canvas = ctx.canvas;
+
+
+    if (width > canvas.width || height > canvas.height) {
+        const newWidth = Math.max(width, canvas.width);
+        const newHeight = Math.max(height, canvas.height);
+        
+        // Resize the canvas and preserve content
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = newWidth;
+        tempCanvas.height = newHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(canvas, 0, 0);
+
+        // Set new canvas dimensions
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+
+        // Restore the preserved content
+        ctx.drawImage(tempCanvas, 0, 0);
+    }
+};
+
+
 SteelAlphabet.drawString = function drawString(input) {
     const normalized = SteelAlphabet.normalizeInput(input);
-    console.log("Normalized text:", normalized);
-
     const canvas = document.getElementById('outputCanvas');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     let x = 10; // Starting x position
     let y = 50; // Starting y position
+    const lineHeight = 100;
+    const symbolSpacing = 5; // Reduced symbol spacing
 
+    // Iterate over normalized input
     for (let i = 0; i < normalized.length; i++) {
         const char = normalized[i];
-        console.log(`Processing character: ${char}`);
 
         if (SteelAlphabet.images.has(char)) {
             const svgNode = SteelAlphabet.images.get(char);
-            if (!svgNode) {
-                console.error(`SVG node is null for character: ${char}`);
-                continue;
-            }
-            const imgWidth = SteelAlphabet.imageWidths.get(char) || 100; // Default width
+            const imgWidth = SteelAlphabet.imageWidths.get(char) || 100;
 
             const serializer = new XMLSerializer();
-            const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="100">${serializer.serializeToString(svgNode)}</svg>`;
+            const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${lineHeight}">${serializer.serializeToString(svgNode)}</svg>`;
             const img = new Image();
             const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(svgBlob);
 
-            img.onload = function() {
-                ctx.drawImage(img, x, y, imgWidth, 100);
-                x += imgWidth + 5;
+            img.onload = function () {
+                SteelAlphabet.expandCanvasIfNeeded(ctx, x + imgWidth, y + lineHeight);
+                ctx.drawImage(img, x, y, imgWidth, lineHeight);
+                x += imgWidth + symbolSpacing; // Move x position for the next symbol
                 URL.revokeObjectURL(url);
             };
             img.src = url;
-        } else {
-            console.error(`Character '${char}' not found in images.`);
+        } else if (char === ' ') {
+            // Handle spaces by adding a gap
+            x += SteelAlphabet.spaceWidth;
+        }
+
+        // Check if the current x position exceeds canvas width; move to the next line if needed
+        if (x > canvas.width - 100) { // Leave 100px padding
+            x = 10; // Reset x to the start of the new line
+            y += lineHeight + symbolSpacing; // Move y to the next line
         }
     }
 };
 
-
-
-
-window.onload = function() {
+window.onload = function () {
     SteelAlphabet.loadImages();
-}
+};
