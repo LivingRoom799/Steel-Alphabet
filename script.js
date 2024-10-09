@@ -2,12 +2,14 @@ const SteelAlphabet = {
     images: new Map(),
     imageWidths: new Map(),
     symbols: [
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z', ' ' // added space
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z', ' '
     ],
-    spaceWidth: 20 
+    spaceWidth: 20,
+    lineHeight: 100,
+    symbolSpacing: 5,
 };
 
-
+// Load SVG images and store their widths
 SteelAlphabet.loadImages = function loadImages() {
     return Promise.all(
         SteelAlphabet.symbols.map(symbol =>
@@ -16,14 +18,8 @@ SteelAlphabet.loadImages = function loadImages() {
                 .then(text => text.replace(/stroke:#[0-9a-fA-F]*;?/g, ''))
                 .then(text => text.replace(/stroke-width:[0-9a-zA-Z]*;?/g, ''))
                 .then(text => {
-                    return (new window.DOMParser()).parseFromString(text, "text/xml");
-                })
-                .then(svgNode => {
+                    const svgNode = (new window.DOMParser()).parseFromString(text, "text/xml");
                     const svgElement = svgNode.documentElement;
-                    if (!svgElement) {
-                        console.error(`No root SVG element found in SVG for symbol: ${symbol}`);
-                        return;
-                    }
                     SteelAlphabet.images.set(symbol, svgElement);
                     const width = parseInt(svgElement.getAttribute("width")) || 100;
                     SteelAlphabet.imageWidths.set(symbol, width);
@@ -41,77 +37,139 @@ SteelAlphabet.normalizeInput = function normalizeInput(input) {
     return normalized;
 };
 
+// Tokenize the input to map characters to symbols
+SteelAlphabet.tokenizeInput = function tokenizeInput(input) {
+    const tokens = [];
+    const normalized = SteelAlphabet.normalizeInput(input);
 
-SteelAlphabet.expandCanvasIfNeeded = function expandCanvasIfNeeded(ctx, width, height) {
-    const canvas = ctx.canvas;
-
-
-    if (width > canvas.width || height > canvas.height) {
-        const newWidth = Math.max(width, canvas.width);
-        const newHeight = Math.max(height, canvas.height);
-        
-        // Resize the canvas and preserve content
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = newWidth;
-        tempCanvas.height = newHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(canvas, 0, 0);
-
-        // Set new canvas dimensions
-        canvas.width = newWidth;
-        canvas.height = newHeight;
-
-        // Restore the preserved content
-        ctx.drawImage(tempCanvas, 0, 0);
+    for (let i = 0; i < normalized.length; i++) {
+        const char = normalized[i];
+        if (SteelAlphabet.images.has(char)) {
+            tokens.push(char);
+        } else if (char === ' ') {
+            tokens.push(' '); // Handle spaces as tokens
+        }
     }
+
+    return tokens;
 };
 
+// Calculate the required canvas width and height
+SteelAlphabet.calculateCanvasSize = function calculateCanvasSize(tokens) {
+    let totalWidth = 0;
+    let totalHeight = 0;
+
+    let x = 10;
+    let y = 50;
+    const lineHeight = SteelAlphabet.lineHeight;
+    const symbolSpacing = SteelAlphabet.symbolSpacing;
+
+    // Iterate over tokens to calculate width and height
+    for (let token of tokens) {
+        if (token !== ' ') {
+            const imgWidth = SteelAlphabet.imageWidths.get(token) || 100;
+
+            // Add image width to total width
+            totalWidth = Math.max(totalWidth, x + imgWidth);
+            x += imgWidth + symbolSpacing;
+
+            // Move to the next line if it exceeds a fixed width limit
+            if (x > 1000) { // Example: max width of 1000px
+                x = 10;
+                y += lineHeight + symbolSpacing;
+            }
+        } else {
+            x += SteelAlphabet.spaceWidth; // Handle space width
+        }
+
+        // Track the height as we add lines
+        totalHeight = Math.max(totalHeight, y + lineHeight);
+    }
+
+    return { width: totalWidth, height: totalHeight };
+};
+
+// Resize the canvas based on calculated width and height
+SteelAlphabet.resizeCanvas = function resizeCanvas(ctx, width, height) {
+    const canvas = ctx.canvas;
+    canvas.width = width;
+    canvas.height = height;
+};
 
 SteelAlphabet.drawString = function drawString(input) {
-    const normalized = SteelAlphabet.normalizeInput(input);
+    const tokens = SteelAlphabet.tokenizeInput(input);
+    const { width, height } = SteelAlphabet.calculateCanvasSize(tokens);
+
     const canvas = document.getElementById('outputCanvas');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    let x = 10; // Starting x position
-    let y = 50; // Starting y position
-    const lineHeight = 100;
-    const symbolSpacing = 5; // Reduced symbol spacing
+    // Resize the canvas to fit the content
+    SteelAlphabet.resizeCanvas(ctx, width, height);
 
-    // Iterate over normalized input
-    for (let i = 0; i < normalized.length; i++) {
-        const char = normalized[i];
+    let x = 10;
+    let y = 50;
+    const lineHeight = SteelAlphabet.lineHeight;
+    const symbolSpacing = SteelAlphabet.symbolSpacing;
+    const spaceWidth = SteelAlphabet.spaceWidth;
 
-        if (SteelAlphabet.images.has(char)) {
-            const svgNode = SteelAlphabet.images.get(char);
-            const imgWidth = SteelAlphabet.imageWidths.get(char) || 100;
+    // First, pre-calculate the x and y positions for each token
+    const positions = [];
+    for (let token of tokens) {
+        if (token !== ' ') {
+            const imgWidth = SteelAlphabet.imageWidths.get(token) || 100;
 
-            const serializer = new XMLSerializer();
-            const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${lineHeight}">${serializer.serializeToString(svgNode)}</svg>`;
-            const img = new Image();
-            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
+            // Store the position and token in the array
+            positions.push({ token, x, y });
 
-            img.onload = function () {
-                SteelAlphabet.expandCanvasIfNeeded(ctx, x + imgWidth, y + lineHeight);
-                ctx.drawImage(img, x, y, imgWidth, lineHeight);
-                x += imgWidth + symbolSpacing; // Move x position for the next symbol
-                URL.revokeObjectURL(url);
-            };
-            img.src = url;
-        } else if (char === ' ') {
-            // Handle spaces by adding a gap
-            x += SteelAlphabet.spaceWidth;
+            // Update x position after placing the token
+            x += imgWidth + symbolSpacing;
+
+            // Move to next line if the x position exceeds canvas width
+            if (x > canvas.width - 100) {
+                x = 10;
+                y += lineHeight + symbolSpacing;
+            }
+        } else {
+            // Handle spaces by just updating the x position
+            x += spaceWidth;
+
+            // Check if we need to move to the next line after adding space
+            if (x > canvas.width - 100) {
+                x = 10;
+                y += lineHeight + symbolSpacing;
+            }
         }
+    }
 
-        // Check if the current x position exceeds canvas width; move to the next line if needed
-        if (x > canvas.width - 100) { // Leave 100px padding
-            x = 10; // Reset x to the start of the new line
-            y += lineHeight + symbolSpacing; // Move y to the next line
-        }
+    // Now, render the images at the pre-calculated positions
+    for (let position of positions) {
+        const token = position.token;
+        const svgNode = SteelAlphabet.images.get(token);
+        const imgWidth = SteelAlphabet.imageWidths.get(token) || 100;
+
+        const serializer = new XMLSerializer();
+        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${lineHeight}">${serializer.serializeToString(svgNode)}</svg>`;
+        const img = new Image();
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+
+        // Draw the image at the pre-calculated x and y position
+        img.onload = function () {
+            ctx.drawImage(img, position.x, position.y, imgWidth, lineHeight);
+            URL.revokeObjectURL(url); // Clean up the object URL after drawing
+        };
+
+        img.src = url; // Trigger the image loading
     }
 };
 
+
+
+
+// When the window loads, load images and set up event handlers
 window.onload = function () {
-    SteelAlphabet.loadImages();
+    SteelAlphabet.loadImages().then(() => {
+        console.log("Images loaded successfully");
+    });
 };
