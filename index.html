@@ -4,15 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Steel Alphabet Translator</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="container">
+      <div>
+        <h3>
+          Translates English to the Steel Alphabet from
+          <a href="https://coppermind.net/wiki/Steel_alphabet" target="_blank">Mistborn</a>
+        </h3>
+      </div>
       <h1>Steel Alphabet Translator</h1>
       <input type="text" id="sentenceInput" placeholder="Type a sentence..." />
       <button onclick="SteelAlphabet.drawString(document.getElementById('sentenceInput').value)">Translate</button>
-      <canvas id="outputCanvas" width="600" height="200"></canvas>
+
+      <div class="canvas-container">
+        <canvas id="outputCanvas" width="600" height="200"></canvas>
+      </div>
+      <p>
+        numbers coming soon...
+      </p>
+      <p>
+        github/LivingRoom799, All rights to symbols DragonSteel Entertainment
+      </p>
     </div>
     <script src="script.js"></script>
   </body>
